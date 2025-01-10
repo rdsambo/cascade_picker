@@ -3,9 +3,8 @@ library cascade_picker;
 import 'package:flutter/material.dart';
 
 class CascadePickerWidget extends StatelessWidget {
-  final List<String> initialPageData;
-  final NextPageCallback nextPageData;
-  final int maxPageNum;
+  final List<Item> items;
+  // final NextPageCallback nextPageData;
   final CascadeController controller;
   final Color tabColor;
   final double tabHeight;
@@ -13,12 +12,10 @@ class CascadePickerWidget extends StatelessWidget {
   final double itemHeight;
   final TextStyle itemTitleStyle;
   final Color itemColor;
-  final Widget? selectedIcon;
 
   const CascadePickerWidget({
-    required this.initialPageData,
-    required this.nextPageData,
-    this.maxPageNum = 3,
+    required this.items,
+    // required this.nextPageData,
     required this.controller,
     this.tabHeight = 40,
     this.tabColor = Colors.white,
@@ -26,8 +23,25 @@ class CascadePickerWidget extends StatelessWidget {
     this.itemHeight = 40,
     this.itemColor = Colors.white,
     this.itemTitleStyle = const TextStyle(color: Colors.black, fontSize: 14),
-    this.selectedIcon,
   });
+
+  int getMaxDepth(List<Item>? items) {
+    if (items == null || items.isEmpty) {
+      return 0; // Nenhum nível em listas vazias ou nulas
+    }
+
+    int maxDepth = 0;
+
+    for (var item in items) {
+      // Calcula a profundidade máxima dos filhos
+      int childDepth = getMaxDepth(item.children);
+      // Atualiza a profundidade máxima geral
+      maxDepth = (maxDepth > childDepth) ? maxDepth : childDepth;
+    }
+
+    // Adiciona 1 para contar o nível atual
+    return maxDepth + 1;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,9 +53,9 @@ class CascadePickerWidget extends StatelessWidget {
           builder: (context) => SizedBox(
             height: MediaQuery.of(context).size.height * 0.8, // Configura a altura do modal
             child: CascadePicker(
-              initialPageData: initialPageData,
-              nextPageData: nextPageData,
-              maxPageNum: maxPageNum,
+              items: items,
+              // nextPageData: nextPageData,
+              maxDepth: getMaxDepth(items),
               controller: controller,
               tabHeight: tabHeight,
               tabColor: tabColor,
@@ -49,7 +63,6 @@ class CascadePickerWidget extends StatelessWidget {
               itemHeight: itemHeight,
               itemColor: itemColor,
               itemTitleStyle: itemTitleStyle,
-              selectedIcon: selectedIcon,
             ),
           ),
         ).whenComplete(() {
@@ -61,13 +74,12 @@ class CascadePickerWidget extends StatelessWidget {
   }
 }
 
-typedef void NextPageCallback(Function(List<String>) pageData, int currentPage, int selectIndex);
+typedef void NextPageCallback(Function(List<ItemSolo>) pageData, int currentPage, int selectIndex);
 
 class CascadePicker extends StatefulWidget {
-
-  final List<String> initialPageData;
-  final NextPageCallback nextPageData;
-  final int maxPageNum;
+  final List<Item> items;
+  // final NextPageCallback nextPageData;
+  final int maxDepth;
   final CascadeController controller;
   final Color tabColor;
   final double tabHeight;
@@ -75,12 +87,11 @@ class CascadePicker extends StatefulWidget {
   final double itemHeight;
   final TextStyle itemTitleStyle;
   final Color itemColor;
-  final Widget? selectedIcon;
 
   CascadePicker({
-    required this.initialPageData,
-    required this.nextPageData,
-    this.maxPageNum = 3,
+    required this.items,
+    // required this.nextPageData,
+    this.maxDepth = 3,
     required this.controller,
     this.tabHeight = 40,
     this.tabColor = Colors.white,
@@ -88,13 +99,13 @@ class CascadePicker extends StatefulWidget {
     this.itemHeight = 40,
     this.itemColor = Colors.white,
     this.itemTitleStyle = const TextStyle(color: Colors.black, fontSize: 14),
-    this.selectedIcon
   });
 
   @override
   _CascadePickerState createState() => _CascadePickerState(this.controller);
 }
 
+final String NONE = "NONE";
 class _CascadePickerState extends State<CascadePicker> with SingleTickerProviderStateMixin {
 
   static String _newTabName = "Select";
@@ -111,13 +122,13 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
   final _sliderFixMargin = ValueNotifier(0.0);
   double _sliderWidth = 20;
 
-  PageController _pageController = PageController(initialPage: 0);
+  PageController? _pageController;
 
   GlobalKey _sliderKey = GlobalKey();
   List<GlobalKey> _tabKeys = [];
 
-  List<List<String>> _pagesData = [];
-  List<String> _selectedTabs = [_newTabName];
+  List<List<ItemSolo>> _pagesData = [];
+  List<ItemSolo> _selectedTabs = [ItemSolo(id: NONE, label: _newTabName)];
   List<int> _selectedIndexes = [-1];
 
   double _animTabWidth = 0;
@@ -127,41 +138,52 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
   bool _isClickAndMoveTab = false;
   int _currentSelectPage = 0;
 
-  _addTab(int page, int atIndex, String currentPageItem) {
+  _addTab(int page, int atIndex, ItemSolo currentPageItem) {
     _loadNextPageData(page, atIndex, currentPageItem);
   }
 
-  _loadNextPageData(int page, int atIndex, String currentPageItem, {bool isUpdatePage = false}) {
-    widget.nextPageData((data) {
-      final nextPageDataIsEmpty = data.isEmpty;
-      if (!nextPageDataIsEmpty) {
+  List<ItemSolo>? nextPageData(currentPage, selectIndex) {
+    List<int> selectedIndexes = _cascadeController.selectedIndexes;
 
-        setState(() {
+    List<Item>? currentItems = widget.items;
+
+    for (int level = 1; level <= currentPage; level++) {
+        if (currentItems == null || currentItems.isEmpty) return [];
+
+        int index = (level == currentPage) ? selectIndex : selectedIndexes[level - 1];
+
+        currentItems = currentItems[index].children;
+    }
+
+    return currentItems?.map((e) => ItemSolo(id: e.id, label: e.label)).toList();
+  }
+
+  _loadNextPageData(int page, int atIndex, ItemSolo currentPageItem, {bool isUpdatePage = false}) {
+    setState(() {
+      List<ItemSolo>? data = nextPageData(page, atIndex);
+        final nextPageDataIsEmpty = data!.isEmpty;
+        if (!nextPageDataIsEmpty) {
+        
           if (isUpdatePage) {
-
             _pagesData[page] = data;
-            _selectedTabs[page] = _newTabName;
+            _selectedTabs[page] = ItemSolo(id: NONE, label: _newTabName);
             _selectedIndexes[page] = -1;
 
             _pagesData.removeRange(page + 1, _pagesData.length);
             _selectedIndexes.removeRange(page + 1, _selectedIndexes.length);
             _selectedTabs.removeRange(page + 1, _selectedTabs.length);
           } else {
-
             _isAnimateTextHide = true;
             _isAddTabEvent = true;
             _pagesData.add(data);
-            _selectedTabs.add(_newTabName);
+            _selectedTabs.add(ItemSolo(id: NONE, label: _newTabName));
             _selectedIndexes.add(-1);
           }
           WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
             _moveSlider(page, isAdd: true);
           });
-        });
-      } else {
-
-        final currentPage = page - 1;
-        setState(() {
+        } else {
+          final currentPage = page - 1;
           _selectedTabs[currentPage] = currentPageItem;
           _selectedIndexes[currentPage] = atIndex;
 
@@ -169,12 +191,11 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
           _selectedIndexes.removeRange(page, _selectedIndexes.length);
           _selectedTabs.removeRange(page, _selectedTabs.length);
           WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
-
             _moveSlider(currentPage);
           });
-        });
-      }
-    }, page, atIndex);
+        }
+      });
+
   }
 
   _moveSlider(int page, {bool movePage = true, bool isAdd = false}) {
@@ -200,7 +221,7 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
     _controller.value = 0;
     _controller.forward();
     if (movePage) {
-      _pageController.animateToPage(page, curve: Curves.linear, duration: Duration(milliseconds: 500));
+      _pageController!.animateToPage(page, curve: Curves.linear, duration: Duration(milliseconds: 500));
     }
   }
 
@@ -230,7 +251,7 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width / _pagesData.length - 10),
             child: Text(
-              _selectedTabs[i],
+              _selectedTabs[i].label,//getLabelBySelectedIdAtLevel(i),
               style: _currentSelectPage == i ? widget.tabTitleStyle.copyWith(color: Colors.redAccent) : widget.tabTitleStyle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -241,7 +262,7 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
           _moveSlider(i);
         },
       );
-      if (i == _pagesData.length - 1 && _selectedTabs[i] == _newTabName) {
+      if (i == _pagesData.length - 1 && _selectedTabs[i].id == NONE) {
         widgets.add(_animateTab(tab: tab));
         _isAnimateTextHide = false;
       } else {
@@ -251,7 +272,7 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
     return widgets;
   }
 
-  Widget _pageItemWidget(int index, int page, String item) {
+  Widget _pageItemWidget(int index, int page, ItemSolo item) {
     return GestureDetector(
       child: Container(
         alignment: Alignment.centerLeft,
@@ -260,17 +281,15 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
         color: widget.itemColor,
         child: Row(
           children: [
-            item == _selectedTabs[page]
+            item.id == _selectedTabs[page].id
                 ? Padding(
               padding: const EdgeInsets.all(5.0),
-              child: widget.selectedIcon == null
-                  ? Icon(Icons.chevron_right, size: 15, color: Colors.redAccent)
-                  : widget.selectedIcon,
+              child: Icon(Icons.chevron_right, size: 15, color: Colors.redAccent),
             )
                 : SizedBox(),
             Text(
-                "$item",
-                style: item == _selectedTabs[page]
+                "${item.label}",
+                style: item.id == _selectedTabs[page].id
                     ? widget.itemTitleStyle.copyWith(color: Colors.redAccent)
                     : widget.itemTitleStyle
             ),
@@ -278,7 +297,7 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
         ),
       ),
       onTap: () {
-        if (page == widget.maxPageNum - 1) {
+        if (page == widget.maxDepth - 1) {
           setState(() {
             _selectedTabs[page] = item;
             _selectedIndexes[page] = index;
@@ -286,7 +305,7 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
               _moveSlider(page);
             });
           });
-        } else if (_tabKeys.length >= widget.maxPageNum || page < _tabKeys.length - 1) {
+        } else if (_tabKeys.length >= widget.maxDepth || page < _tabKeys.length - 1) {
           if (index == _selectedIndexes[page]) {
             _moveSlider(page + 1);
           } else {
@@ -319,9 +338,10 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
     super.initState();
 
     widget.controller.restoreState();
+  _pageController = PageController(initialPage: _cascadeController.selectedIndexes.length);
 
     if (widget.controller.isFirstInteraction) {
-      _pagesData.add(widget.initialPageData);
+      _pagesData.add(widget.items.map<ItemSolo>((e) => ItemSolo(id: e.id, label: e.label)).toList());
     }
 
     _controller = AnimationController(
@@ -381,7 +401,7 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
         Expanded(
           child: PageView.builder(
             itemCount: _pagesData.length,
-            controller: _pageController,
+            controller: _pageController, 
             itemBuilder: (context, index) => _pageWidget(index),
             onPageChanged: (position) {
               if (!_isClickAndMoveTab) {
@@ -398,13 +418,27 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
   }
 }
 
+class Item {
+  String id;
+  String label;
+  List<Item>? children;
+
+  Item({required this.id, required this.label, this.children});
+}
+class ItemSolo {
+  String id;
+  String label;
+
+  ItemSolo({required this.id, required this.label});
+}
+
 class CascadeController {
   _CascadePickerState? _state;
 
   bool isFirstInteraction = true;
-  List<String>? _savedSelectedTabs;
+  List<ItemSolo>? _savedSelectedTabs;
   List<int>? _savedSelectedIndexes;
-  List<List<String>>? _savedPagesData;
+  List<List<ItemSolo>>? _savedPagesData;
 
   void _setState(_CascadePickerState state) {
     _state = state;
@@ -413,21 +447,21 @@ class CascadeController {
   void saveState() {
     isFirstInteraction = false;
     if (_state != null) {
-      _savedSelectedTabs = List<String>.from(_state!._selectedTabs);
+      _savedSelectedTabs = List<ItemSolo>.from(_state!._selectedTabs);
       _savedSelectedIndexes = List<int>.from(_state!._selectedIndexes);
-      _savedPagesData = List<List<String>>.from(_state!._pagesData);
+      _savedPagesData = List<List<ItemSolo>>.from(_state!._pagesData);
     }
   }
 
   void restoreState() {
     if (_state != null && _savedSelectedTabs != null && _savedSelectedIndexes != null && _savedPagesData != null) {
-      _state!._selectedTabs = List<String>.from(_savedSelectedTabs!);
+      _state!._selectedTabs = List<ItemSolo>.from(_savedSelectedTabs!);
       _state!._selectedIndexes = List<int>.from(_savedSelectedIndexes!);
-      _state!._pagesData = List<List<String>>.from(_savedPagesData!);
+      _state!._pagesData = List<List<ItemSolo>>.from(_savedPagesData!);
     }
   }
 
-  List<String> get selectedTitles => _state!._selectedTabs;
+  List<ItemSolo> get selectedTitles => _state!._selectedTabs;
   List<int> get selectedIndexes => _state!._selectedIndexes;
   bool isCompleted() => !_state!._selectedTabs.contains(_CascadePickerState._newTabName);
 }

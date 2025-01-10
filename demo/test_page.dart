@@ -93,7 +93,7 @@ class _TestPageState extends State<TestPage> {
                   }
                 },
                 controller: _cascadeController,
-                maxPageNum: 3,
+                maxDepth: 3,
                 // selectedIcon: Image.asset("images/ic_select_mark.png", width: 10, height: 10, color: Colors.redAccent,),
               ),
             ),
