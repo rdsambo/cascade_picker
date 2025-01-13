@@ -31,33 +31,39 @@ class CascadePickerWidget extends StatelessWidget {
 
   int getMaxDepth(List<Item>? items) {
     if (items == null || items.isEmpty) {
-      return 0; // Nenhum nível em listas vazias ou nulas
+      return 0;
     }
 
     int maxDepth = 0;
 
     for (var item in items) {
-      // Calcula a profundidade máxima dos filhos
       int childDepth = getMaxDepth(item.children);
-      // Atualiza a profundidade máxima geral
       maxDepth = (maxDepth > childDepth) ? maxDepth : childDepth;
     }
 
-    // Adiciona 1 para contar o nível atual
     return maxDepth + 1;
   }
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<String?>(
+    return ValueListenableBuilder<String>(
       valueListenable: controller._fieldTextNotifier,
       builder: (context, fieldText, child) {
-
+        
         return TextField(
           readOnly: true,
           decoration: InputDecoration(
-            hintText: fieldText == null || fieldText.isEmpty ? hintText : fieldText ,
+            hintText: fieldText.isEmpty ? hintText : fieldText ,
             border: OutlineInputBorder(),
+            suffixIcon: fieldText.isEmpty || fieldText == hintText
+              ? null
+              : IconButton(
+              icon: Icon(Icons.clear),
+              iconSize: 20,
+              onPressed: () {
+                controller.resetState();
+              },
+            ),
           ),
           onTap: () {
             showModalBottomSheet(
@@ -269,7 +275,7 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width / _pagesData.length - 10),
             child: Text(
-              _selectedTabs[i].label,//getLabelBySelectedIdAtLevel(i),
+              _selectedTabs[i].label,
               style: _currentSelectPage == i ? widget.tabTitleStyle.copyWith(color: Colors.redAccent) : widget.tabTitleStyle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -346,9 +352,7 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
     return ListView.builder(
       padding: EdgeInsets.zero,
       itemCount: _pagesData[page].length,
-      itemBuilder: (context, index) => _pageItemWidget(index, page, _pagesData[page][index]),
-//      separatorBuilder: (context, index) => Divider(height: 0.3, thickness: 0.3, color: Color(0xffdddddd), indent: 15, endIndent: 15,),
-    );
+      itemBuilder: (context, index) => _pageItemWidget(index, page, _pagesData[page][index]));
   }
 
   @override
@@ -465,8 +469,16 @@ class CascadeController  extends ChangeNotifier {
       ValueNotifier<String>('');
 
   void _setState(_CascadePickerState state) {
-    // print('hintText $hintText');
     _state = state;
+  }
+
+  void resetState() {
+    _savedSelectedTabs = null;
+    _savedSelectedIndexes = null;
+    _savedPagesData = null;
+    _fieldTextNotifier.value = '';
+
+    isFirstInteraction = true;
   }
 
   void saveState() {
