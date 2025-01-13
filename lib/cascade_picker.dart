@@ -2,10 +2,13 @@ library cascade_picker;
 
 import 'package:flutter/material.dart';
 
+final String NONE = "NONE";
+
 class CascadePickerWidget extends StatelessWidget {
   final List<Item> items;
-  // final NextPageCallback nextPageData;
   final CascadeController controller;
+  final String hintText;
+  final String tabHintText;
   final Color tabColor;
   final double tabHeight;
   final TextStyle tabTitleStyle;
@@ -15,8 +18,9 @@ class CascadePickerWidget extends StatelessWidget {
 
   const CascadePickerWidget({
     required this.items,
-    // required this.nextPageData,
     required this.controller,
+    this.hintText = "Select",
+    this.tabHintText = "Select",
     this.tabHeight = 40,
     this.tabColor = Colors.white,
     this.tabTitleStyle = const TextStyle(color: Colors.black, fontSize: 14),
@@ -45,31 +49,47 @@ class CascadePickerWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ElevatedButton(
-      onPressed: () {
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          builder: (context) => SizedBox(
-            height: MediaQuery.of(context).size.height * 0.8, // Configura a altura do modal
-            child: CascadePicker(
-              items: items,
-              // nextPageData: nextPageData,
-              maxDepth: getMaxDepth(items),
-              controller: controller,
-              tabHeight: tabHeight,
-              tabColor: tabColor,
-              tabTitleStyle: tabTitleStyle,
-              itemHeight: itemHeight,
-              itemColor: itemColor,
-              itemTitleStyle: itemTitleStyle,
-            ),
+    return ValueListenableBuilder<String?>(
+      valueListenable: controller._fieldTextNotifier,
+      builder: (context, fieldText, child) {
+
+        return TextField(
+          readOnly: true,
+          decoration: InputDecoration(
+            hintText: fieldText == null || fieldText.isEmpty ? hintText : fieldText ,
+            border: OutlineInputBorder(),
           ),
-        ).whenComplete(() {
-          controller.saveState(); // Salva o estado ao fechar o modal
-        });
+          onTap: () {
+            showModalBottomSheet(
+              context: context,
+              backgroundColor: Colors.white,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(0),
+                ),
+              ),
+              builder: (context) => SizedBox(
+                height: MediaQuery.of(context).size.height * 0.4,
+                child: CascadePicker(
+                  items: items,
+                  maxDepth: getMaxDepth(items),
+                  hintText: hintText,
+                  tabHintText: tabHintText,
+                  controller: controller,
+                  tabHeight: tabHeight,
+                  tabColor: tabColor,
+                  tabTitleStyle: tabTitleStyle,
+                  itemHeight: itemHeight,
+                  itemColor: itemColor,
+                  itemTitleStyle: itemTitleStyle,
+                ),
+              ),
+            ).whenComplete(() {
+              controller.saveState();
+            });
+          },
+        );
       },
-      child: const Text('Open Cascade Picker'),
     );
   }
 }
@@ -78,9 +98,10 @@ typedef void NextPageCallback(Function(List<ItemSolo>) pageData, int currentPage
 
 class CascadePicker extends StatefulWidget {
   final List<Item> items;
-  // final NextPageCallback nextPageData;
   final int maxDepth;
   final CascadeController controller;
+  final String hintText;
+  final String tabHintText;
   final Color tabColor;
   final double tabHeight;
   final TextStyle tabTitleStyle;
@@ -90,9 +111,10 @@ class CascadePicker extends StatefulWidget {
 
   CascadePicker({
     required this.items,
-    // required this.nextPageData,
     this.maxDepth = 3,
     required this.controller,
+    required this.hintText,
+    required this.tabHintText,
     this.tabHeight = 40,
     this.tabColor = Colors.white,
     this.tabTitleStyle = const TextStyle(color: Colors.black, fontSize: 14),
@@ -105,11 +127,7 @@ class CascadePicker extends StatefulWidget {
   _CascadePickerState createState() => _CascadePickerState(this.controller);
 }
 
-final String NONE = "NONE";
 class _CascadePickerState extends State<CascadePicker> with SingleTickerProviderStateMixin {
-
-  static String _newTabName = "Select";
-
   final CascadeController _cascadeController;
 
   _CascadePickerState(this._cascadeController) {
@@ -128,7 +146,7 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
   List<GlobalKey> _tabKeys = [];
 
   List<List<ItemSolo>> _pagesData = [];
-  List<ItemSolo> _selectedTabs = [ItemSolo(id: NONE, label: _newTabName)];
+  List<ItemSolo> _selectedTabs = [];
   List<int> _selectedIndexes = [-1];
 
   double _animTabWidth = 0;
@@ -143,7 +161,7 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
   }
 
   List<ItemSolo>? nextPageData(currentPage, selectIndex) {
-    List<int> selectedIndexes = _cascadeController.selectedIndexes;
+    List<int>? selectedIndexes = _cascadeController.selectedIndexes;
 
     List<Item>? currentItems = widget.items;
 
@@ -166,7 +184,7 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
         
           if (isUpdatePage) {
             _pagesData[page] = data;
-            _selectedTabs[page] = ItemSolo(id: NONE, label: _newTabName);
+            _selectedTabs[page] = ItemSolo(id: NONE, label: widget.tabHintText);
             _selectedIndexes[page] = -1;
 
             _pagesData.removeRange(page + 1, _pagesData.length);
@@ -176,7 +194,7 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
             _isAnimateTextHide = true;
             _isAddTabEvent = true;
             _pagesData.add(data);
-            _selectedTabs.add(ItemSolo(id: NONE, label: _newTabName));
+            _selectedTabs.add(ItemSolo(id: NONE, label: widget.tabHintText));
             _selectedIndexes.add(-1);
           }
           WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
@@ -337,8 +355,10 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
   void initState() {
     super.initState();
 
+    _selectedTabs = [ItemSolo(id: NONE, label: widget.tabHintText)];
+
     widget.controller.restoreState();
-  _pageController = PageController(initialPage: _cascadeController.selectedIndexes.length);
+    _pageController = PageController(initialPage: _cascadeController.selectedIndexes.length);
 
     if (widget.controller.isFirstInteraction) {
       _pagesData.add(widget.items.map<ItemSolo>((e) => ItemSolo(id: e.id, label: e.label)).toList());
@@ -375,6 +395,7 @@ class _CascadePickerState extends State<CascadePicker> with SingleTickerProvider
             alignment: Alignment.bottomLeft,
             children: [
               Container(
+                color: const Color.fromARGB(255, 200, 203, 212),
                 width: MediaQuery.of(context).size.width,
                 child: Row(
                   children: _tabWidgets(),
@@ -432,7 +453,7 @@ class ItemSolo {
   ItemSolo({required this.id, required this.label});
 }
 
-class CascadeController {
+class CascadeController  extends ChangeNotifier {
   _CascadePickerState? _state;
 
   bool isFirstInteraction = true;
@@ -440,7 +461,11 @@ class CascadeController {
   List<int>? _savedSelectedIndexes;
   List<List<ItemSolo>>? _savedPagesData;
 
+  final ValueNotifier<String> _fieldTextNotifier =
+      ValueNotifier<String>('');
+
   void _setState(_CascadePickerState state) {
+    // print('hintText $hintText');
     _state = state;
   }
 
@@ -450,7 +475,17 @@ class CascadeController {
       _savedSelectedTabs = List<ItemSolo>.from(_state!._selectedTabs);
       _savedSelectedIndexes = List<int>.from(_state!._selectedIndexes);
       _savedPagesData = List<List<ItemSolo>>.from(_state!._pagesData);
+
+      _updateSelectedTiles();
     }
+  }
+
+  void _updateSelectedTiles() {
+    _fieldTextNotifier.value = isCompleted
+      ? _state?._selectedTabs.map((e) => e.label).join(' > ') ?? _state!.widget.hintText
+      : _state!.widget.hintText;
+
+    notifyListeners();
   }
 
   void restoreState() {
@@ -461,7 +496,8 @@ class CascadeController {
     }
   }
 
-  List<ItemSolo> get selectedTitles => _state!._selectedTabs;
-  List<int> get selectedIndexes => _state!._selectedIndexes;
-  bool isCompleted() => !_state!._selectedTabs.contains(_CascadePickerState._newTabName);
+  String get fieldText => _fieldTextNotifier.value;
+  List<ItemSolo> get selectedTitles => _state?._selectedTabs  ?? [];
+  List<int> get selectedIndexes => _state?._selectedIndexes ?? [];
+  bool get isCompleted => !(_state?._selectedTabs.map((e) => e.label).contains(_state!.widget.tabHintText) ?? true);
 }
